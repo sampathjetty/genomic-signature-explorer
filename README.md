@@ -1,13 +1,6 @@
 \# Genomic Signature Explorer
 
-A Streamlit-based bioinformatics tool for comprehensive DNA sequence analysis including:
-
-\- 6-frame ORF detection  
-\- ORF density heatmap  
-\- ORF length distribution  
-\- Codon usage analysis (counts, frequencies, RSCU)  
-\- Codon usage comparison (log2 FC)  
-\- GC3 content analysis  
+Unlike simple command-line genome scripts, this project provides an interactive Streamlit UI with six-frame ORF detection, ORF density heatmaps, and direct comparison of codon usage between two organisms. Designed for quick exploratory analysis and reproducible reporting: export ORF tables (CSV), codon frequency tables, and publication-quality PNGs directly from the UI. 
 
 \## features
 
