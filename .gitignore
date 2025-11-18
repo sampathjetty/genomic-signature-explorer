@@ -16,6 +16,3 @@ Thumbs.db
 
 # Logs
 *.log
-
-# Demo outputs
-demo/demo_outputs/
