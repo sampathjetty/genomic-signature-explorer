@@ -1,0 +1,21 @@
+# Python
+_pycache_/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env
+*.egg-info/
+
+# Streamlit
+.streamlit/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Demo outputs
+demo/demo_outputs/
