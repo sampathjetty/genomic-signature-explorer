@@ -1,7 +1,5 @@
 \# Genomic Signature Explorer
 
-
-
 A Streamlit-based bioinformatics tool for comprehensive DNA sequence analysis including:
 
 \- 6-frame ORF detection  
@@ -12,6 +10,7 @@ A Streamlit-based bioinformatics tool for comprehensive DNA sequence analysis in
 \- GC3 content analysis  
 
 \## features
+
 \A) ORF Analysis
 \- Detection of ORFs across all six reading frames
 \- ORF length distribution visualization
