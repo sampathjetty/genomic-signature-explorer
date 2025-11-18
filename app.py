@@ -2,7 +2,6 @@
 orfheatmap.py
 
 ORF Heatmap Generator + Codon Bias & GC3 Analyzer
-Cleaned, unified and optimized single-file Streamlit app.
 
 Features:
 - 6-frame ORF finder (forward + reverse) with robust scanning (no premature frame breaks)
@@ -14,7 +13,7 @@ Features:
 - Streamlit UI with tabs, caching, and responsive tables/plots
 - Small utility functions and defensive coding
 
-Author: ChatGPT (GPT-5 Thinking mini)
+Author: Jetty Samapth kumar
 Date: 2025-11
 """
 
@@ -31,16 +30,11 @@ import textwrap
 import matplotlib
 matplotlib.use("Agg")
 
-# ---------------------------
-# Constants / Genetic code
-# ---------------------------
-START_CODONS = ("ATG",)  # default; UI can expose alternatives later
+START_CODONS = ("ATG",) 
 STOP_CODONS = ("TAA", "TAG", "TGA")
 
-# canonical 64 codons in TCAG order (keeps heatmap layout deterministic)
 ALL_CODONS = [a + b + c for a in "TCAG" for b in "TCAG" for c in "TCAG"]
 
-# Basic genetic code mapping (DNA codon -> AA single letter)
 GENETIC_CODE = {
     'TTT': 'F', 'TTC': 'F', 'TTA': 'L', 'TTG': 'L',
     'TCT': 'S', 'TCC': 'S', 'TCA': 'S', 'TCG': 'S',
@@ -60,23 +54,18 @@ GENETIC_CODE = {
     'GGT': 'G', 'GGC': 'G', 'GGA': 'G', 'GGG': 'G'
 }
 
-# ---------------------------
-# Helper functions
-# ---------------------------
-
 def safe_seq_upper(seq):
     """Return uppercase DNA sequence with U->T and only standard letters kept."""
     return str(seq).upper().replace('U', 'T')
 
 def translate_nt_seq(nt_seq):
     """Translate a DNA sequence (Biopython Seq) to AA sequence without trailing '*' (use to_stop=True)."""
-    # Using Biopython Seq.translate with to_stop=True to avoid terminal '*' in result
+   
     s = Seq(nt_seq)
     try:
-        aa = s.translate(table=1, to_stop=True)  # table=1 standard
+        aa = s.translate(table=1, to_stop=True)  
         return str(aa)
     except Exception:
-        # fallback: naive codon translation using GENETIC_CODE (not including termination)
         aa_chars = []
         for i in range(0, (len(nt_seq)//3)*3, 3):
             cod = nt_seq[i:i+3]
@@ -86,10 +75,6 @@ def translate_nt_seq(nt_seq):
         if '*' in aa_str:
             aa_str = aa_str.split('*')[0]
         return aa_str
-
-# ---------------------------
-# ORF finder (robust)
-# ---------------------------
 
 def find_orfs_in_seq(seq_str, min_length_nt=150, starts=START_CODONS, stops=STOP_CODONS):
     """
@@ -102,13 +87,11 @@ def find_orfs_in_seq(seq_str, min_length_nt=150, starts=START_CODONS, stops=STOP
     seq_len = len(seq)
     results = []
 
-    # Forward strand frames (offset 0,1,2)
     for f in range(3):
         i = f
         while i + 3 <= seq_len:
             cod = seq[i:i+3]
             if cod in starts:
-                # search for next stop codon downstream
                 j = i + 3
                 found_stop = False
                 while j + 3 <= seq_len:
@@ -129,18 +112,15 @@ def find_orfs_in_seq(seq_str, min_length_nt=150, starts=START_CODONS, stops=STOP
                                 'length_aa': len(aa_seq),
                                 'aa_seq': aa_seq
                             })
-                        # advance scan to just after this stop to allow downstream ORFs
                         i = j + 3
                         break
                     else:
                         j += 3
                 if not found_stop:
-                    # No stop found for this start; move one codon forward and keep scanning frame
                     i += 3
             else:
                 i += 3
 
-    # Reverse complement frames
     rc_seq = str(Seq(seq).reverse_complement())
     for f in range(3):
         i = f
@@ -155,13 +135,11 @@ def find_orfs_in_seq(seq_str, min_length_nt=150, starts=START_CODONS, stops=STOP
                         found_stop = True
                         rc_start = i + 1
                         rc_end = j + 3
-                        # map rc coords to forward coords (1-based)
                         fwd_end = seq_len - rc_start + 1
                         fwd_start = seq_len - rc_end + 1
                         length_nt = fwd_end - fwd_start + 1
                         if length_nt >= min_length_nt:
                             aa_seq = translate_nt_seq(rc_seq[i:rc_end])
-                            # frame numbering: 4,5,6 for reverse frames (mapped)
                             results.append({
                                 'frame': 3 + f + 1,
                                 'strand': -1,
@@ -180,13 +158,8 @@ def find_orfs_in_seq(seq_str, min_length_nt=150, starts=START_CODONS, stops=STOP
             else:
                 i += 3
 
-    # Sort ORFs by start coordinate (useful)
     results_sorted = sorted(results, key=lambda r: (r['orf_start'], -r['length_nt']))
     return results_sorted
-
-# ---------------------------
-# Conversion to DataFrame
-# ---------------------------
 
 def orfs_to_dataframe(orfs, seq_id):
     """Convert ORF dict list to pandas DataFrame"""
@@ -196,13 +169,8 @@ def orfs_to_dataframe(orfs, seq_id):
     df = pd.DataFrame(orfs)
     df['seq_id'] = seq_id
     df['strand_sym'] = df['strand'].map({1: '+', -1: '-'})
-    # reorder columns
     df = df[['seq_id', 'frame', 'strand_sym', 'orf_start', 'orf_end', 'length_nt', 'length_aa', 'aa_seq']]
     return df
-
-# ---------------------------
-# Window density computation
-# ---------------------------
 
 def compute_window_density(orfs, seq_len, window_size=500, step=None):
     """Return windows list and counts matrix (6 x n_windows)"""
@@ -219,11 +187,7 @@ def compute_window_density(orfs, seq_len, window_size=500, step=None):
             if not (orf_e < ws or orf_s > we):
                 counts[frame_idx, w_idx] += 1
     return windows, counts
-
-# ---------------------------
-# Codon counts / RSCU / stats
-# ---------------------------
-
+    
 def codon_counts_from_orfs(seq_str, orfs):
     """Count codons for a sequence string across given ORF coordinate list (1-based inclusive)."""
     seq = safe_seq_upper(seq_str)
@@ -288,10 +252,6 @@ def chi_square_test(dfA, dfB):
     except Exception:
         return None, None
 
-# ---------------------------
-# GC3 computation
-# ---------------------------
-
 def gc3_from_orfs(seq_str, orfs):
     """Compute GC3 per ORF; returns DataFrame with orf_start, orf_end, gc3, length."""
     seq = safe_seq_upper(seq_str)
@@ -309,10 +269,6 @@ def gc3_from_orfs(seq_str, orfs):
         gc3 = sum(1 for ch in third_pos if ch in 'GC') / len(third_pos)
         rows.append({'orf_start': s + 1, 'orf_end': e, 'gc3': gc3, 'length': len(seg)})
     return pd.DataFrame(rows)
-
-# ---------------------------
-# Plotting helpers
-# ---------------------------
 
 def plot_length_histogram(df, bins=50):
     fig, ax = plt.subplots(figsize=(8, 4))
@@ -335,7 +291,6 @@ def plot_heatmap(windows, counts):
     ax.set_yticks(np.arange(6) + 0.5)
     ax.set_yticklabels(['Frame 1 (+)', 'Frame 2 (+)', 'Frame 3 (+)', 'Frame 4 (-)', 'Frame 5 (-)', 'Frame 6 (-)'])
     n_windows = len(windows)
-    # create readable x-tick labels (s-e)
     xlabels = [f"{s}-{e}" for (s, e) in windows]
     if n_windows > 30:
         step = max(1, n_windows // 20)
@@ -348,12 +303,10 @@ def plot_heatmap(windows, counts):
 
 def plot_codon_log2fc_heatmap(log2fc_series):
     """Arrange 64 codons as 8x8 grid following ALL_CODONS order for visualization."""
-    # Clip to reasonable range for color scale
     arr = np.array(log2fc_series).reshape(8, 8)
     fig, ax = plt.subplots(figsize=(8, 6))
     sns.heatmap(arr, cmap='RdBu_r', center=0, vmin=-3, vmax=3, ax=ax, cbar_kws={'label': 'log2(freq A / freq B)'})
     ax.set_title('Codon usage log2 fold-change (A vs B)')
-    # annotate codons in grid
     codon_grid = np.array(ALL_CODONS).reshape(8, 8)
     for (i, j), cod in np.ndenumerate(codon_grid):
         ax.text(j + 0.5, i + 0.5, cod, ha='center', va='center', fontsize=8, color='black')
@@ -372,10 +325,6 @@ def plot_gc3_distribution(gc3_df, title='GC3 distribution'):
     plt.tight_layout()
     return fig
 
-# ---------------------------
-# Caching heavy functions
-# ---------------------------
-
 @st.cache_data(show_spinner=False)
 def cached_find_orfs(seq_str, min_length_nt):
     return find_orfs_in_seq(seq_str, min_length_nt=min_length_nt)
@@ -384,10 +333,6 @@ def cached_find_orfs(seq_str, min_length_nt):
 def cached_codon_counts(seq_str, orfs):
     return codon_counts_from_orfs(seq_str, orfs)
 
-# ---------------------------
-# Streamlit UI
-# ---------------------------
-
 st.set_page_config(page_title='Genomic Signature Explorer', layout='wide', page_icon='🧬')
 
 st.title('Genomic Signature Explorer')
@@ -395,9 +340,6 @@ st.markdown('Interactive ORF analysis, codon bias visualizer, and GC3 explorer. 
 
 tab_orf, tab_codon = st.tabs(['📊 ORF Analysis', '🔬 Codon & GC3'])
 
-# ---------------------------
-# ORF Analysis tab
-# ---------------------------
 with tab_orf:
     st.header('ORF Finder & Density Heatmap')
     with st.expander('How it works'):
@@ -418,7 +360,6 @@ with tab_orf:
         uploaded = st.file_uploader('Upload FASTA file(s)', type=['fa','fasta','fas','txt','fna'], accept_multiple_files=True, key='orf_files')
         paste = st.text_area('Or paste FASTA (single or multiple records)', height=120)
 
-    # Parse sequences
     records = []
     if uploaded:
         for f in uploaded:
@@ -445,7 +386,6 @@ with tab_orf:
     if not records:
         st.info('Upload or paste FASTA to run ORF analysis')
     else:
-        # run ORF finding per record (cached)
         all_orf_dfs = []
         seq_summaries = []
         for rec in records:
@@ -460,12 +400,10 @@ with tab_orf:
         else:
             df_all = pd.DataFrame(columns=['seq_id','frame','strand_sym','orf_start','orf_end','length_nt','length_aa','aa_seq'])
 
-        # filter by frames selected
         if frames_select:
             frames_int = [int(x) for x in frames_select]
             df_all = df_all[df_all['frame'].astype(int).isin(frames_int)]
 
-        # Sequence summary table
         st.subheader('Sequence summary')
         st.dataframe(pd.DataFrame(seq_summaries), use_container_width=True)
 
@@ -475,14 +413,12 @@ with tab_orf:
             csv_bytes = df_all.to_csv(index=False).encode('utf-8')
             st.download_button('Download ORF table (CSV)', data=csv_bytes, file_name='orfs_table.csv', mime='text/csv')
 
-            # ORF length distribution
             st.subheader('ORF length distribution')
             fig_len = plot_length_histogram(df_all)
             st.pyplot(fig_len)
             buf_len = BytesIO(); fig_len.savefig(buf_len, format='png', dpi=150, bbox_inches='tight'); buf_len.seek(0)
             st.download_button('Download length distribution (PNG)', data=buf_len, file_name='orf_length_distribution.png', mime='image/png')
 
-            # Heatmap per sequence
             st.subheader('ORF density heatmap (by sequence)')
             seq_choice = st.selectbox('Choose sequence', options=[r.id for r in records])
             seq_rec = next(r for r in records if r.id == seq_choice)
@@ -494,7 +430,6 @@ with tab_orf:
                 buf_hm = BytesIO(); fig_hm.savefig(buf_hm, format='png', dpi=200, bbox_inches='tight'); buf_hm.seek(0)
                 st.download_button('Download heatmap (PNG)', data=buf_hm, file_name='orf_density_heatmap.png', mime='image/png')
 
-                # small metrics
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric('Total ORFs', len(orfs_seq))
@@ -507,9 +442,6 @@ with tab_orf:
         else:
             st.warning('No ORFs found with current settings. Try lowering minimum ORF length.')
 
-# ---------------------------
-# Codon & GC3 tab
-# ---------------------------
 with tab_codon:
     st.header('Codon usage & GC3 analysis')
     st.markdown('Compute codon frequencies from detected ORFs and compare two groups.')
@@ -526,7 +458,6 @@ with tab_codon:
         show_rscu = st.checkbox('Show RSCU (Relative Synonymous Codon Usage)', value=True)
 
     if st.button('Run codon analysis'):
-        # parse A
         recsA = []
         if uploaded_A:
             try:
@@ -542,7 +473,6 @@ with tab_codon:
             for rec in SeqIO.parse(stream, 'fasta'):
                 recsA.append(rec)
 
-        # parse B
         recsB = []
         if uploaded_B:
             try:
@@ -562,17 +492,14 @@ with tab_codon:
             st.error('Provide at least Group A sequences (upload or paste).')
             st.stop()
 
-        # For each record in A, detect ORFs (cached) and count codons
         countsA = {c: 0 for c in ALL_CODONS}
         all_orfs_A = []
         for rec in recsA:
             orfs = cached_find_orfs(str(rec.seq), min_orf_for_codon)
-            # optional: filter ORFs by frame selection? here we keep all
             all_orfs_A.extend([o for o in orfs])
             if use_orfs_for_counts:
                 cts = cached_codon_counts(str(rec.seq), orfs)
             else:
-                # count from whole sequence (frame 1)
                 fake_orf = [{'orf_start':1, 'orf_end':len(rec.seq)}]
                 cts = cached_codon_counts(str(rec.seq), fake_orf)
             for k, v in cts.items():
@@ -589,7 +516,6 @@ with tab_codon:
             st.subheader('Group A RSCU')
             st.dataframe(rA[['count', 'RSCU', 'aa']], use_container_width=True)
 
-        # GC3 for Group A
         if all_orfs_A:
             gc3_A = gc3_from_orfs(''.join(str(r.seq) for r in recsA) if len(recsA)>1 else str(recsA[0].seq), all_orfs_A)
             if not gc3_A.empty:
@@ -598,7 +524,6 @@ with tab_codon:
                 st.pyplot(fig_gc3_A)
                 st.download_button('Download Group A GC3 (PNG)', data=(BytesIO(fig_gc3_A.savefig(BytesIO(), format='png'),) if False else b''), file_name='groupA_gc3.png')  # placeholder no-op; below we also provide proper buffer
 
-                # proper buffer and metrics
                 buf_gc3A = BytesIO(); fig_gc3_A.savefig(buf_gc3A, format='png', dpi=150, bbox_inches='tight'); buf_gc3A.seek(0)
                 st.download_button('Download Group A GC3 (PNG)', data=buf_gc3A, file_name='groupA_gc3.png', mime='image/png')
                 col1, col2, col3 = st.columns(3)
@@ -611,7 +536,6 @@ with tab_codon:
         else:
             st.info('No ORFs found in Group A to compute GC3.')
 
-        # If Group B provided - compute counts and comparison
         if recsB:
             countsB = {c: 0 for c in ALL_CODONS}
             all_orfs_B = []
@@ -636,7 +560,6 @@ with tab_codon:
                 st.subheader('Group B RSCU')
                 st.dataframe(rB[['count', 'RSCU', 'aa']], use_container_width=True)
 
-            # Comparison heatmap (log2 FC)
             st.subheader('Codon usage comparison (log2 fold-change)')
             l2 = log2_fold_change(dfA, dfB)
             fig_l2 = plot_codon_log2fc_heatmap(l2.values)
@@ -644,7 +567,6 @@ with tab_codon:
             buf_l2 = BytesIO(); fig_l2.savefig(buf_l2, format='png', dpi=200, bbox_inches='tight'); buf_l2.seek(0)
             st.download_button('Download codon log2FC heatmap (PNG)', data=buf_l2, file_name='codon_log2fc.png', mime='image/png')
 
-            # chi-square
             chi2, p = chi_square_test(dfA, dfB)
             if chi2 is not None:
                 st.markdown(f"**Chi-square test**: χ² = {chi2:.2f}, p = {p:.3e}")
@@ -653,7 +575,6 @@ with tab_codon:
                 else:
                     st.info('No strong evidence of overall codon usage difference (p >= 0.001)')
 
-            # GC3 for B
             if all_orfs_B:
                 gc3_B = gc3_from_orfs(''.join(str(r.seq) for r in recsB) if len(recsB)>1 else str(recsB[0].seq), all_orfs_B)
                 if not gc3_B.empty:
@@ -665,7 +586,6 @@ with tab_codon:
 
         st.success('Codon analysis complete.')
 
-# Footer
 st.markdown('---')
 st.caption('Genomic Signature Explorer — ORF & Codon visual analysis (Streamlit + Biopython)')
 
